@@ -11,6 +11,7 @@ special_regex_chars = {'|', '+', '*', '?', '(', ')', CONCATENATION}
 class Automaton:
     def __init__(self, regex=None, depth=0):
         self.depth = depth
+        self.alphabet = set()
         if regex:
             if CONCATENATION in regex:
                 raise Exception(
@@ -33,7 +34,11 @@ class Automaton:
         binary_operators = {'|'}
 
         def is_other(literal):
-            return literal["char"] not in (unary_operators | binary_operators | parentheses) or (literal["char"] in (unary_operators | binary_operators | parentheses) and literal["escaped"])
+            result = literal["char"] not in (unary_operators | binary_operators | parentheses) or (
+                literal["char"] in (unary_operators | binary_operators | parentheses) and literal["escaped"])
+            if result:
+                self.alphabet.add(literal["char"])
+            return result
 
         # Process escape sequences
         i = 0
@@ -330,10 +335,45 @@ class Automaton:
 
     def make_deterministic(self):
         # Convert the NFA to a DFA using the subset construction.
-        pass
 
-    def union(self, nfa1, nfa2):
-        # Union of two NFAs
+        def epsilon_closure(state):
+            # Return the epsilon closure of the given state.
+            closure = set([state])
+            stack = [state]
+
+            while stack:
+                current_state = stack.pop()
+                current_state_obj = global_state_register[current_state]
+
+                if EPS in current_state_obj.transitions:
+                    for next_state in current_state_obj.transitions[EPS]:
+                        if next_state not in closure:
+                            closure.add(next_state)
+                            stack.append(next_state)
+
+            return closure
+
+        def move(states, symbol):
+            # Return the set of states reachable from the given set of states
+            # using the given symbol.
+            reachable = set()
+
+            for state in states:
+                state_obj = global_state_register[state]
+                if symbol in state_obj.transitions:
+                    for next_state in state_obj.transitions[symbol]:
+                        reachable.add(next_state)
+
+            return reachable
+
+        print(self.get_all_transitions())
+
+        # Create a new Automaton (DFA).
+        dfa = Automaton()
+        dfa.is_deterministic = True
+
+    def minimize(self):
+        # Minimize the DFA using the Hopcroft algorithm.
         pass
 
     class State:
@@ -354,30 +394,88 @@ class Automaton:
 
 
 if __name__ == "__main__":
-
-    # Example 1: a simple automaton that recognizes (a|b)*abb
-    # automaton = Automaton()
-    # automaton.add_state(automaton.State(0, is_initial=True))
-    # automaton.add_state(automaton.State(1))
-    # automaton.add_state(automaton.State(2))
-    # automaton.add_state(automaton.State(3, is_final=True))
-
-    # automaton.add_transition(0, 'a', 0)
-    # automaton.add_transition(0, 'b', 0)
-    # automaton.add_transition(0, 'a', 1)
-    # automaton.add_transition(1, 'b', 2)
-    # automaton.add_transition(2, 'b', 3)
-
-    # automaton.visualize()
-
-    # Example 2: a simple automaton that recognizes (a|b)*abb directly from a regular expression
-    automaton = Automaton(regex='a(b|c)*d')
-    # print(automaton)
-    # print(automaton.get_all_transitions())
+    automaton = Automaton(regex='(a|b)*abb')
+    print(automaton.get_all_transitions())
+    automaton.make_deterministic()
     automaton.visualize()
 
-    # # Example 3: a simple automaton that recognizes (a|b)*abb directly from a regular expression and then converts it to a DFA
-    # automaton = Automaton()
-    # automaton.from_regex('(a|b)*abb')
-    # automaton.make_deterministic()
-    # automaton.visualize()
+    def nfa_to_dfa(nfa_transitions, initial_state):
+
+        def epsilon_closure(state, transitions):
+            closure = set([state])
+            for (s1, symbol, s2) in transitions:
+                if s1 == state and symbol == 'ε':
+                    closure.update(epsilon_closure(s2, transitions))
+            return closure
+
+        def epsilon_closure_set(states, transitions):
+            closure = set()
+            for state in states:
+                closure.update(epsilon_closure(state, transitions))
+            return closure
+
+        def move(states, symbol, transitions):
+            next_states = set()
+            for (s1, sym, s2) in transitions:
+                if s1 in states and sym == symbol:
+                    next_states.add(s2)
+            return next_states
+
+        alphabet = {symbol for (_, symbol, _)
+                    in nfa_transitions if symbol != 'ε'}
+
+        initial_closure = frozenset(
+            epsilon_closure(initial_state, nfa_transitions))
+
+        dfa_state_counter = 0
+        A = [initial_closure]
+
+        nfa_dfa_state_map = {
+            initial_closure: dfa_state_counter
+        }
+
+        dfa_transitions = []
+
+        for i in A:
+            found_transitions = False
+            for symbol in alphabet:
+
+                move_i = move(i, symbol, nfa_transitions)
+                alphabet_closure = frozenset(
+                    epsilon_closure_set(move_i, nfa_transitions))
+
+                if len(alphabet_closure) == 0:
+                    continue
+
+                found_transitions = True
+
+                if alphabet_closure not in nfa_dfa_state_map:
+                    dfa_state_counter += 1
+                    A.append(alphabet_closure)
+                    nfa_dfa_state_map[alphabet_closure] = dfa_state_counter
+
+                print("i: " + str(nfa_dfa_state_map[i]))
+                print(str(i))
+                print("symbol: " + symbol)
+                print("alphabet_closure: " +
+                      str(nfa_dfa_state_map[alphabet_closure]))
+                print(str(alphabet_closure))
+
+                dfa_transitions.append(
+                    (nfa_dfa_state_map[i], symbol, nfa_dfa_state_map[alphabet_closure]))
+
+            if not found_transitions:
+                break
+
+        print(nfa_dfa_state_map)
+        print("IIIII")
+        print(dfa_transitions)
+
+        # Start of subset construction
+        dfa_transitions = set()
+
+        return dfa_transitions
+
+    dfa_transitions = nfa_to_dfa(
+        automaton.get_all_transitions(), automaton.initial_state)
+    print(dfa_transitions)
