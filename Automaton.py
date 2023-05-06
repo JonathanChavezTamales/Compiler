@@ -218,8 +218,10 @@ class Automaton:
             attributes = {}
             if state.is_initial:
                 attributes['shape'] = 'pentagon'
-            if state.is_final:
+            elif state.is_final:
                 attributes['shape'] = 'doublecircle'
+            else:
+                attributes['shape'] = 'circle'
             dot.node(state_name, state.name, **attributes)
 
         # Add transitions as edges
@@ -373,7 +375,7 @@ class Automaton:
         dfa.is_deterministic = True
 
     def minimize(self):
-        # Minimize the DFA using the Hopcroft algorithm.
+        # TODO: Minimize the DFA using the Hopcroft algorithm.
         pass
 
     class State:
@@ -392,12 +394,43 @@ class Automaton:
         def __repr__(self):
             return f"State {self.name} (initial={self.is_initial}, final={self.is_final})"
 
+    def from_transitions(self, transitions, initial_state, final_states):
+        global_state_register.clear()
+        # Create a new Automaton from a list of transitions. A transition is a tuple (source, symbol, target).
+
+        # Create a new Automaton.
+        automaton = Automaton()
+
+        # Add the initial state.
+        automaton.initial_state = initial_state
+        automaton.states[initial_state] = Automaton.State(
+            initial_state, parent_nfa=automaton, is_initial=True, is_final=initial_state in final_states)
+
+        # Add the final states.
+        for state in final_states:
+            automaton.final_states.add(state)
+
+        # Add the transitions.
+        for (source, symbol, target) in transitions:
+            if source not in automaton.states:
+                automaton.states[source] = Automaton.State(
+                    source, parent_nfa=automaton, is_initial=source == initial_state, is_final=source in final_states)
+            if target not in automaton.states:
+                automaton.states[target] = Automaton.State(
+                    target, parent_nfa=automaton, is_final=target in final_states, is_initial=False)
+
+            global_state_register[source] = automaton.states[source]
+            global_state_register[target] = automaton.states[target]
+            automaton.states[source].add_transition(symbol, target)
+
+        return automaton
+
 
 if __name__ == "__main__":
     automaton = Automaton(regex='(a|b)*abb')
     print(automaton.get_all_transitions())
     automaton.make_deterministic()
-    automaton.visualize()
+    # automaton.visualize()
 
     def nfa_to_dfa(nfa_transitions, initial_state):
 
@@ -431,7 +464,7 @@ if __name__ == "__main__":
         A = [initial_closure]
 
         nfa_dfa_state_map = {
-            initial_closure: dfa_state_counter
+            initial_closure: str(dfa_state_counter)
         }
 
         dfa_transitions = []
@@ -452,14 +485,8 @@ if __name__ == "__main__":
                 if alphabet_closure not in nfa_dfa_state_map:
                     dfa_state_counter += 1
                     A.append(alphabet_closure)
-                    nfa_dfa_state_map[alphabet_closure] = dfa_state_counter
-
-                print("i: " + str(nfa_dfa_state_map[i]))
-                print(str(i))
-                print("symbol: " + symbol)
-                print("alphabet_closure: " +
-                      str(nfa_dfa_state_map[alphabet_closure]))
-                print(str(alphabet_closure))
+                    nfa_dfa_state_map[alphabet_closure] = str(
+                        dfa_state_counter)
 
                 dfa_transitions.append(
                     (nfa_dfa_state_map[i], symbol, nfa_dfa_state_map[alphabet_closure]))
@@ -467,15 +494,23 @@ if __name__ == "__main__":
             if not found_transitions:
                 break
 
-        print(nfa_dfa_state_map)
-        print("IIIII")
-        print(dfa_transitions)
+        # Add final states
+        final_states = []
+        for state in A:
+            for final_state in automaton.final_states:
+                if final_state in state:
+                    final_states.append(nfa_dfa_state_map[state])
 
-        # Start of subset construction
-        dfa_transitions = set()
+        return dfa_transitions, final_states
 
-        return dfa_transitions
-
-    dfa_transitions = nfa_to_dfa(
+    dfa_transitions, final_states = nfa_to_dfa(
         automaton.get_all_transitions(), automaton.initial_state)
+
+    print("DFA Transitions")
     print(dfa_transitions)
+    print(final_states)
+
+    b = Automaton()
+    b = b.from_transitions(dfa_transitions, '0', final_states)
+    print(b.initial_state)
+    b.visualize()
