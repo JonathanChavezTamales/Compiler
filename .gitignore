@@ -1,3 +1,4 @@
 *.gv
 *.pdf
 .vscode
+__pycache__

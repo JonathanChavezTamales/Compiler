@@ -3,20 +3,29 @@ from graphviz import Digraph
 
 EPS = 'ε'  # Epsilon symbol (empty string)
 CONCATENATION = '·'  # Concatenation symbol
-global_state_register = dict()  # {state_name: State}
-global_state_counter = 0
 special_regex_chars = {'|', '+', '*', '?', '(', ')', CONCATENATION}
+
+LETTER_SPECIAL_CHAR = chr(251)
+DIGIT_SPECIAL_CHAR = chr(252)
+
+global_automata_counter = 0
+global_state_register = dict()  # {automata_id: {state_name: State}}
+global_state_counter = 0
 
 
 class Automaton:
-    def __init__(self, regex=None, depth=0):
+    def __init__(self, regex=None, depth=0, id=None):
+        global global_automata_counter
         self.depth = depth
         self.alphabet = set()
-        if regex:
-            if CONCATENATION in regex:
-                raise Exception(
-                    f"Symbol '{CONCATENATION}' is not allowed in the regex")
+        if id is None:
+            self.id = global_automata_counter
+            global_automata_counter += 1
+            global_state_register[self.id] = dict()
+        else:
+            self.id = id
 
+        if regex:
             preprocessed_regex = self._preprocess_regex(regex)
             self.from_regex(preprocessed_regex)
         else:
@@ -27,6 +36,10 @@ class Automaton:
             self.transitions = dict()
 
     def _preprocess_regex(self, regex):
+        if CONCATENATION in regex:
+            raise Exception(
+                f"Symbols {CONCATENATION} are not allowed in the regex")
+
         processed_regex = []  # {literal: char, escaped: bool}
 
         unary_operators = {'+', '*', '?'}
@@ -197,7 +210,7 @@ class Automaton:
 
         state.parent_nfa = self
 
-        global_state_register[state_name] = state
+        global_state_register[self.id][state_name] = state
         return state_name
 
     def add_transition(self, source, symbol, target):
@@ -218,14 +231,25 @@ class Automaton:
             attributes = {}
             if state.is_initial:
                 attributes['shape'] = 'pentagon'
+                if state.is_final:
+                    attributes['shape'] = 'doubleoctagon'
             elif state.is_final:
                 attributes['shape'] = 'doublecircle'
             else:
                 attributes['shape'] = 'circle'
             dot.node(state_name, state.name, **attributes)
 
+        # Create nodes for the rest of the states
+        for src, label, dest in transitions:
+            if src not in self.states:
+                dot.node(src, src, shape='circle')
+
         # Add transitions as edges
         for src, label, dest in transitions:
+            if label == LETTER_SPECIAL_CHAR:
+                label = 'letter'
+            elif label == DIGIT_SPECIAL_CHAR:
+                label = 'digit'
             dot.edge(src, dest, label=label)
 
         # Render and display the graph
@@ -243,7 +267,7 @@ class Automaton:
 
         while queue:
             state = queue.pop(0)
-            state = global_state_register[state]
+            state = global_state_register[self.id][state]
             if state in visited:
                 continue
             visited.add(state)
@@ -257,15 +281,51 @@ class Automaton:
         return transitions
 
     def _plus(self, nfa):
-        pass
+        new_nfa = Automaton(depth=self.depth + 1, id=self.id)
+        initial = new_nfa.add_state(is_initial=True)
+        final = new_nfa.add_state(is_final=True)
+
+        # Add epsilon transition from the new initial state to the initial state of nfa
+        new_nfa.add_transition(initial, EPS, nfa.initial_state)
+        global_state_register[self.id][nfa.initial_state].is_initial = False
+
+        # Add epsilon transitions from the final states of nfa to its initial state and the new final state
+        for final_state in nfa.final_states:
+            nfa.add_transition(final_state, EPS, nfa.initial_state)
+            nfa.add_transition(final_state, EPS, final)
+            global_state_register[self.id][final_state].is_final = False
+
+        nfa.final_states = {}
+        nfa.initial_state = None
+
+        return new_nfa
 
     def _question(self, nfa):
-        pass
+        new_nfa = Automaton(depth=self.depth + 1, id=self.id)
+        initial = new_nfa.add_state(is_initial=True)
+        final = new_nfa.add_state(is_final=True)
+
+        # Add epsilon transition from the new initial state to the initial state of nfa
+        new_nfa.add_transition(initial, EPS, nfa.initial_state)
+        global_state_register[self.id][nfa.initial_state].is_initial = False
+
+        # Add epsilon transition from the new initial state to the new final state (zero occurrence case)
+        new_nfa.add_transition(initial, EPS, final)
+
+        # Add epsilon transitions from the final states of nfa to the new final state
+        for final_state in nfa.final_states:
+            nfa.add_transition(final_state, EPS, final)
+            global_state_register[self.id][final_state].is_final = False
+
+        nfa.final_states = {}
+        nfa.initial_state = None
+
+        return new_nfa
 
     def _concatenate(self, nfa):
         for final_state in self.final_states:
             self.add_transition(final_state, EPS, nfa.initial_state)
-            global_state_register[final_state].is_final = False
+            global_state_register[self.id][final_state].is_final = False
 
         # Set the final states to the other NFA's final states
         self.final_states = nfa.final_states
@@ -281,18 +341,18 @@ class Automaton:
         return self
 
     def _star(self, nfa):
-        new_nfa = Automaton(depth=self.depth + 1)
+        new_nfa = Automaton(depth=self.depth + 1, id=self.id)
         initial = new_nfa.add_state(is_initial=True)
         final = new_nfa.add_state(is_final=True)
 
         new_nfa.add_transition(initial, EPS, final)
         new_nfa.add_transition(initial, EPS, nfa.initial_state)
-        global_state_register[nfa.initial_state].is_initial = False
+        global_state_register[self.id][nfa.initial_state].is_initial = False
 
         for final_state in nfa.final_states:
             nfa.add_transition(final_state, EPS, final)
             nfa.add_transition(final_state, EPS, nfa.initial_state)
-            global_state_register[final_state].is_final = False
+            global_state_register[self.id][final_state].is_final = False
 
         nfa.final_states = {}
         nfa.initial_state = None
@@ -300,24 +360,24 @@ class Automaton:
         return new_nfa
 
     def _union(self, nfa):
-        new_nfa = Automaton(depth=self.depth + 1)
+        new_nfa = Automaton(depth=self.depth + 1, id=self.id)
         initial = new_nfa.add_state(is_initial=True)
         final = new_nfa.add_state(is_final=True)
 
         # Add epsilon transitions from the new initial state to the initial states of nfa1 and nfa2
         new_nfa.add_transition(initial, EPS, self.initial_state)
         new_nfa.add_transition(initial, EPS, nfa.initial_state)
-        global_state_register[self.initial_state].is_initial = False
-        global_state_register[nfa.initial_state].is_initial = False
+        global_state_register[self.id][self.initial_state].is_initial = False
+        global_state_register[self.id][nfa.initial_state].is_initial = False
 
         # Add epsilon transitions from the final states of nfa1 and nfa2 to the new final state
         for final_state in self.final_states:
             self.add_transition(final_state, EPS, final)
-            global_state_register[final_state].is_final = False
+            global_state_register[self.id][final_state].is_final = False
 
         for final_state in nfa.final_states:
             nfa.add_transition(final_state, EPS, final)
-            global_state_register[final_state].is_final = False
+            global_state_register[self.id][final_state].is_final = False
 
         self.final_states = {}
         self.initial_state = None
@@ -327,7 +387,7 @@ class Automaton:
         return new_nfa
 
     def _symbol(self, symbol):
-        nfa = Automaton(depth=self.depth + 1)
+        nfa = Automaton(depth=self.depth + 1, id=self.id)
         initial = nfa.add_state(is_initial=True)
         final = nfa.add_state(is_final=True)
 
@@ -336,43 +396,37 @@ class Automaton:
         return nfa
 
     def make_deterministic(self):
-        # Convert the NFA to a DFA using the subset construction.
 
-        def epsilon_closure(state):
-            # Return the epsilon closure of the given state.
-            closure = set([state])
-            stack = [state]
-
-            while stack:
-                current_state = stack.pop()
-                current_state_obj = global_state_register[current_state]
-
-                if EPS in current_state_obj.transitions:
-                    for next_state in current_state_obj.transitions[EPS]:
-                        if next_state not in closure:
-                            closure.add(next_state)
-                            stack.append(next_state)
-
-            return closure
-
-        def move(states, symbol):
-            # Return the set of states reachable from the given set of states
-            # using the given symbol.
-            reachable = set()
-
-            for state in states:
-                state_obj = global_state_register[state]
-                if symbol in state_obj.transitions:
-                    for next_state in state_obj.transitions[symbol]:
-                        reachable.add(next_state)
-
-            return reachable
-
-        print(self.get_all_transitions())
+        dfa_transitions, final_states = self.nfa_to_dfa(
+            self.get_all_transitions(),
+            self.initial_state
+        )
 
         # Create a new Automaton (DFA).
         dfa = Automaton()
+        dfa = dfa.from_transitions(dfa_transitions, '0', final_states)
+
         dfa.is_deterministic = True
+
+        # Make self a DFA.
+        self.is_deterministic = True
+        self.states = dfa.states
+        self.initial_state = '0'
+        self.final_states = dfa.final_states
+        self.transitions = dfa.transitions
+        self.id = dfa.id
+
+        # Build a transition table.
+        transition_table = {}
+
+        transitions = self.get_all_transitions()
+
+        for (source, symbol, target) in transitions:
+            if source not in transition_table:
+                transition_table[source] = {}
+            transition_table[source][symbol] = target
+
+        self.transition_table = transition_table
 
     def minimize(self):
         # TODO: Minimize the DFA using the Hopcroft algorithm.
@@ -395,7 +449,6 @@ class Automaton:
             return f"State {self.name} (initial={self.is_initial}, final={self.is_final})"
 
     def from_transitions(self, transitions, initial_state, final_states):
-        global_state_register.clear()
         # Create a new Automaton from a list of transitions. A transition is a tuple (source, symbol, target).
 
         # Create a new Automaton.
@@ -419,20 +472,13 @@ class Automaton:
                 automaton.states[target] = Automaton.State(
                     target, parent_nfa=automaton, is_final=target in final_states, is_initial=False)
 
-            global_state_register[source] = automaton.states[source]
-            global_state_register[target] = automaton.states[target]
+            global_state_register[automaton.id][source] = automaton.states[source]
+            global_state_register[automaton.id][target] = automaton.states[target]
             automaton.states[source].add_transition(symbol, target)
 
         return automaton
 
-
-if __name__ == "__main__":
-    automaton = Automaton(regex='(a|b)*abb')
-    print(automaton.get_all_transitions())
-    automaton.make_deterministic()
-    # automaton.visualize()
-
-    def nfa_to_dfa(nfa_transitions, initial_state):
+    def nfa_to_dfa(self, nfa_transitions, initial_state):
 
         def epsilon_closure(state, transitions):
             closure = set([state])
@@ -470,7 +516,6 @@ if __name__ == "__main__":
         dfa_transitions = []
 
         for i in A:
-            found_transitions = False
             for symbol in alphabet:
 
                 move_i = move(i, symbol, nfa_transitions)
@@ -479,8 +524,6 @@ if __name__ == "__main__":
 
                 if len(alphabet_closure) == 0:
                     continue
-
-                found_transitions = True
 
                 if alphabet_closure not in nfa_dfa_state_map:
                     dfa_state_counter += 1
@@ -491,26 +534,92 @@ if __name__ == "__main__":
                 dfa_transitions.append(
                     (nfa_dfa_state_map[i], symbol, nfa_dfa_state_map[alphabet_closure]))
 
-            if not found_transitions:
-                break
-
         # Add final states
         final_states = []
         for state in A:
-            for final_state in automaton.final_states:
+            for final_state in self.final_states:
                 if final_state in state:
                     final_states.append(nfa_dfa_state_map[state])
 
         return dfa_transitions, final_states
 
-    dfa_transitions, final_states = nfa_to_dfa(
-        automaton.get_all_transitions(), automaton.initial_state)
+    def match(self, string):
+        if not self.is_deterministic:
+            raise Exception("Automaton is not deterministic.")
 
-    print("DFA Transitions")
-    print(dfa_transitions)
-    print(final_states)
+        if CONCATENATION in string or LETTER_SPECIAL_CHAR in string or DIGIT_SPECIAL_CHAR in string:
+            raise Exception(
+                f"String contains either special characters {CONCATENATION}, {LETTER_SPECIAL_CHAR}, {DIGIT_SPECIAL_CHAR}")
 
-    b = Automaton()
-    b = b.from_transitions(dfa_transitions, '0', final_states)
-    print(b.initial_state)
-    b.visualize()
+        # Match the string.
+        current_state = self.initial_state
+        for symbol in string:
+            is_letter = symbol in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            is_digit = symbol in "0123456789"
+
+            if is_letter:
+                special_symbol = LETTER_SPECIAL_CHAR
+            elif is_digit:
+                special_symbol = DIGIT_SPECIAL_CHAR
+
+            # Match special characters if there was no match for the current symbol.
+            if symbol not in self.transition_table[current_state]:
+                if special_symbol in self.transition_table[current_state]:
+                    symbol = special_symbol
+                else:
+                    return False
+
+            current_state = self.transition_table[current_state][symbol]
+
+        return current_state in self.final_states
+
+    def transition(self, state, symbol):
+        # If state is an object, get its name.
+        if isinstance(state, Automaton.State):
+            state = state.name
+
+        is_letter = symbol in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        is_digit = symbol in "0123456789"
+
+        special_symbol = None
+
+        if is_letter:
+            special_symbol = LETTER_SPECIAL_CHAR
+        elif is_digit:
+            special_symbol = DIGIT_SPECIAL_CHAR
+
+        if state not in self.transition_table:
+            return None
+
+        if symbol not in self.transition_table[state]:
+            # Match special characters if there was no match for the current symbol.
+            if special_symbol in self.transition_table[state]:
+                symbol = special_symbol
+            else:
+                return None
+
+        state_name = self.transition_table[state][symbol]
+        return global_state_register[self.id][state_name]
+
+    def get_initial_state(self):
+        # Return the object of the initial state.
+        return self.states[self.initial_state]
+
+
+if __name__ == "__main__":
+
+    automaton = Automaton(regex='a(b|c)*d')
+    # automaton.make_deterministic()
+    # print(automaton.get_all_transitions())
+    automaton.make_deterministic()
+    automaton.visualize()
+    print(automaton.get_all_transitions())
+    print(automaton.match('abbbcd'))
+
+    # automaton = Automaton(regex='l(l|d)*')
+    # automaton.make_deterministic()
+    # automaton.visualize()
+    # cases = ["l", "ll", "llllllll",
+    #          "lldldldldldldldlllldllld", "dlll", "sdfsdf", "", "l", "d", "l+11"]
+    # for case in cases:
+    #     print(f"Match '{case}': {automaton.match(case)}")
