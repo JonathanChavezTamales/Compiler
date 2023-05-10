@@ -1,4 +1,4 @@
-from Automaton import Automaton, DIGIT_SPECIAL_CHAR, LETTER_SPECIAL_CHAR
+from Automaton import Automaton, DIGIT_SPECIAL_CHAR, LETTER_SPECIAL_CHAR, ANYTHING_SPECIAL_CHAR
 import os
 
 
@@ -84,13 +84,6 @@ class LexerAutomaton:
         return last_accepting_substring
 
 
-# [a-z]
-aToz_regex = f"({'|'.join([chr(i) for i in range(ord('a'), ord('z') + 1)])})"
-# [A-Z]
-AToZ_regex = f"({'|'.join([chr(i) for i in range(ord('A'), ord('Z') + 1)])})"
-# [0-9]
-zeroToNine_regex = f"({'|'.join([chr(i) for i in range(ord('0'), ord('9') + 1)])})"
-
 if __name__ == "__main__":
 
     keywords = ["int", "float", "string", "for", "if",
@@ -110,11 +103,11 @@ if __name__ == "__main__":
     # Same as "[a-zA-Z]([a-zA-Z]|[0-9])*""
     identifier_regex = f"{LETTER_SPECIAL_CHAR}({LETTER_SPECIAL_CHAR}|{DIGIT_SPECIAL_CHAR})*"
     # Same as "\".*\""
-    string_regex = f"\"({LETTER_SPECIAL_CHAR}|({'|'.join(whitespaces)})|{DIGIT_SPECIAL_CHAR})*\""
+    string_regex = f"\"({ANYTHING_SPECIAL_CHAR})*\""
     # Same as "[0-9]+(\.[0-9]+)?"
     number_regex = f"{DIGIT_SPECIAL_CHAR}+(.{DIGIT_SPECIAL_CHAR}+)?"
     # Same as "/\*.*\*/"
-    comment_regex = f"/\*({LETTER_SPECIAL_CHAR}|{DIGIT_SPECIAL_CHAR})*\*/"
+    comment_regex = f"/\*({ANYTHING_SPECIAL_CHAR})*\*/"
 
     # Build the automata
 
@@ -123,8 +116,6 @@ if __name__ == "__main__":
     string_automaton = LexerAutomaton(string_regex, "strings")
     number_automaton = LexerAutomaton(number_regex, "numbers")
     comment_automaton = LexerAutomaton(comment_regex, "comments")
-
-    print(string_automaton.automaton.match("\"df df\""))
 
     symbols_automaton = LexerAutomaton(symbols_regex, "symbols")
     whitespace_automaton = LexerAutomaton(whitespaces_regex, "whitespaces")
@@ -183,7 +174,6 @@ if __name__ == "__main__":
 
             for automaton in automata:
                 match = automaton.find_longest_match(program[i:])
-                print(program[i:], automaton.name, match)
                 if longest_match is None or len(match) > len(longest_match):
                     longest_match = match
                     longest_match_token_type = automaton.name
@@ -243,9 +233,6 @@ if __name__ == "__main__":
 
             i += len(longest_match)
 
-            print(longest_match)
-            print(longest_match_token_type)
-
         return symbol_table, scanner_output
 
     symbol_table, scanner_output = tokenize(programs[0])
@@ -253,16 +240,24 @@ if __name__ == "__main__":
     print(programs[0])
 
     print("Token ids:")
-    print(token_ids)
+    for token_name, token_id in token_ids.items():
+        print(token_name, token_id)
+
     print("\nSymbol table:")
     print(symbol_table)
+    for token_type, token_values in symbol_table.items():
+        print(token_type)
+        for position, value in token_values.items():
+            print(position, value)
+
     print("\nScanner output:")
-    print(scanner_output)
+    for i in scanner_output:
+        print(i)
 
     def recognize_token(token_id, symbol_table_position=None):
         for token_name, token_id_ in token_ids.items():
             if token_id_ == token_id:
-                if token_name == "identifiers" or token_name == "strings" or token_name == "numbers" or token_name == "comments":
+                if token_name == "identifiers" or token_name == "strings" or token_name == "numbers":
                     return symbol_table[token_name][symbol_table_position]
                 else:
                     return token_name

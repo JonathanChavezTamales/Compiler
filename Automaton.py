@@ -7,6 +7,7 @@ special_regex_chars = {'|', '+', '*', '?', '(', ')', CONCATENATION}
 
 LETTER_SPECIAL_CHAR = chr(251)
 DIGIT_SPECIAL_CHAR = chr(252)
+ANYTHING_SPECIAL_CHAR = chr(253)
 
 global_automata_counter = 0
 global_state_register = dict()  # {automata_id: {state_name: State}}
@@ -250,6 +251,8 @@ class Automaton:
                 label = 'letter'
             elif label == DIGIT_SPECIAL_CHAR:
                 label = 'digit'
+            elif label == ANYTHING_SPECIAL_CHAR:
+                label = 'anything'
             dot.edge(src, dest, label=label)
 
         # Render and display the graph
@@ -547,15 +550,16 @@ class Automaton:
         if not self.is_deterministic:
             raise Exception("Automaton is not deterministic.")
 
-        if CONCATENATION in string or LETTER_SPECIAL_CHAR in string or DIGIT_SPECIAL_CHAR in string:
+        if CONCATENATION in string or LETTER_SPECIAL_CHAR in string or DIGIT_SPECIAL_CHAR in string or ANYTHING_SPECIAL_CHAR in string:
             raise Exception(
-                f"String contains either special characters {CONCATENATION}, {LETTER_SPECIAL_CHAR}, {DIGIT_SPECIAL_CHAR}")
+                f"String contains either special characters {CONCATENATION}, {LETTER_SPECIAL_CHAR}, {DIGIT_SPECIAL_CHAR}, {ANYTHING_SPECIAL_CHAR} or is not a valid string.")
 
         # Match the string.
         current_state = self.initial_state
         for symbol in string:
             is_letter = symbol in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
             is_digit = symbol in "0123456789"
+            special_symbol = None
 
             if is_letter:
                 special_symbol = LETTER_SPECIAL_CHAR
@@ -566,6 +570,8 @@ class Automaton:
             if symbol not in self.transition_table[current_state]:
                 if special_symbol in self.transition_table[current_state]:
                     symbol = special_symbol
+                elif ANYTHING_SPECIAL_CHAR in self.transition_table[current_state]:
+                    symbol = ANYTHING_SPECIAL_CHAR
                 else:
                     return False
 
@@ -595,6 +601,8 @@ class Automaton:
             # Match special characters if there was no match for the current symbol.
             if special_symbol in self.transition_table[state]:
                 symbol = special_symbol
+            elif ANYTHING_SPECIAL_CHAR in self.transition_table[state]:
+                symbol = ANYTHING_SPECIAL_CHAR
             else:
                 return None
 
