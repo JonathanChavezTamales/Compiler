@@ -3,31 +3,145 @@ import os
 
 
 class Lexer:
-    def __init__(self, keywords, special_symbols, identifier_regex, string_regex, number_regex) -> None:
+    def __init__(self, keywords, symbols, escaped_symbols, whitespaces, identifier_regex, string_regex, number_regex, comments_regex) -> None:
         self.keywords = keywords
-        self.special_symbols = special_symbols
+        self.symbols = symbols
+        self.whitespaces = whitespaces
+
+        self.whitespaces_regex = f'({"|".join(whitespaces)})+'
+        self.keywords_regex = f'({"|".join(keywords)})'
+        self.symbols_regex = f'({"|".join(escaped_symbols)})'
+
         self.identifier_regex = identifier_regex
         self.string_regex = string_regex
         self.number_regex = number_regex
-        self.automaton = None
+        self.comments_regex = comments_regex
+
+        self.build_token_id_table()
 
         self.build_automaton()
 
-    def tokenize(self, input_string):
-        """Return the sequence of tokens corresponding to the input string."""
+    def tokenize(self, program):
+        symbol_table = {}  # {token_type: {token_value: position_in_symbol_table}}}
+        scanner_output = []  # [(token_id, position_in_symbol_table)]
 
-        tokens = []
+        automata = [self.keywords_automaton, self.identifier_automaton, self.string_automaton,
+                    self.number_automaton, self.comment_automaton, self.symbols_automaton, self.whitespace_automaton]
 
-        automaton = self.build_automaton()
+        i = 0
+
+        while i < len(program):
+            longest_match = None
+            longest_match_token_type = None
+
+            for automaton in automata:
+                match = automaton.find_longest_match(program[i:])
+                if longest_match is None or len(match) > len(longest_match):
+                    longest_match = match
+                    longest_match_token_type = automaton.name
+
+            if longest_match is None or len(longest_match) == 0:
+                raise Exception("Syntax error: invalid token at",
+                                i, "artifact: ", program[i:min(len(program), i+10)])
+
+            if longest_match_token_type == "whitespaces":
+                i += len(longest_match)
+                continue
+
+            remaining = program[i+len(longest_match):]
+            longest_remaining_match = None
+            longest_remaining_match_token_type = None
+
+            if remaining:
+                for automaton in automata:
+                    match = automaton.find_longest_match(remaining)
+                    if longest_remaining_match is None or len(match) > len(longest_remaining_match):
+                        longest_remaining_match = match
+                        longest_remaining_match_token_type = automaton.name
+
+                # Tokens should be separated by whitespaces or symbols, so if the longest match is not followed by a whitespace or a symbol, then it is not a valid token
+                if longest_match_token_type in ["identifiers", "strings", "numbers"] and longest_remaining_match_token_type not in ["whitespaces", "symbols"]:
+                    raise Exception(
+                        "Syntax error: delimiter expected after", longest_match, "but", program[i+len(longest_match)], "found at", i+len(longest_match))
+
+            # Add the token to the symbol table
+            if longest_match_token_type == "identifiers" or longest_match_token_type == "strings" or longest_match_token_type == "numbers":
+                if longest_match_token_type not in symbol_table:
+                    symbol_table[longest_match_token_type] = {}
+
+                if longest_match not in symbol_table[longest_match_token_type]:
+                    symbol_table[longest_match_token_type][len(
+                        symbol_table[longest_match_token_type])] = longest_match
+
+            def get_symbol_table_position(token_type, token_value):
+                if token_type not in symbol_table:
+                    return None
+                else:
+                    # {position_in_symbol_table: token_value}
+                    symbol_table_positions = symbol_table[token_type]
+                    for position, value in symbol_table_positions.items():
+                        if value == token_value:
+                            return position
+
+            def get_token_id(token_type, token_value):
+                if token_type == "identifiers" or token_type == "strings" or token_type == "numbers" or token_type == "comments":
+                    return self.token_ids[token_type]
+                elif token_type == "symbols" or token_type == "keywords":
+                    return self.token_ids[token_value]
+                else:
+                    raise Exception("Invalid token type")
+
+            scanner_output.append((get_token_id(longest_match_token_type, longest_match), get_symbol_table_position(
+                longest_match_token_type, longest_match)))
+
+            i += len(longest_match)
+
+        return symbol_table, scanner_output
+
+    def build_token_id_table(self):
+        # Generate the token ids
+        self.token_ids = {}
+        id_counter = 0
+
+        for keyword in self.keywords:
+            self.token_ids[keyword] = id_counter
+            id_counter += 1
+        for symbol in self.symbols:
+            self.token_ids[symbol] = id_counter
+            id_counter += 1
+        self.token_ids["identifiers"] = id_counter
+        id_counter += 1
+        self.token_ids["strings"] = id_counter
+        id_counter += 1
+        self.token_ids["numbers"] = id_counter
+        id_counter += 1
+        self.token_ids["comments"] = id_counter
+        id_counter += 1
+
+    def recognize_token(self, token_id, symbol_table_position=None):
+        for token_name, token_id_ in self.token_ids.items():
+            if token_id_ == token_id:
+                if token_name == "identifiers" or token_name == "strings" or token_name == "numbers":
+                    return symbol_table[token_name][symbol_table_position]
+                else:
+                    return token_name
+        return None
 
     def build_automaton(self):
         """Build the automaton that will tokenize the input string."""
 
-        keywords_automaton = Automaton()
-        special_symbols_automaton = Automaton()
-        identifier_automaton = Automaton()
-        string_automaton = Automaton()
-        number_automaton = Automaton()
+        self.keywords_automaton = LexerAutomaton(
+            self.keywords_regex, "keywords")
+        print(self.symbols_regex)
+        self.symbols_automaton = LexerAutomaton(self.symbols_regex, "symbols")
+        self.identifier_automaton = LexerAutomaton(
+            self.identifier_regex, "identifiers")
+        self.string_automaton = LexerAutomaton(self.string_regex, "strings")
+        self.number_automaton = LexerAutomaton(self.number_regex, "numbers")
+        self.comment_automaton = LexerAutomaton(
+            self.comments_regex, "comments")
+        self.whitespace_automaton = LexerAutomaton(
+            self.whitespaces_regex, "whitespaces")
 
 
 class LexerAutomaton:
@@ -96,10 +210,6 @@ if __name__ == "__main__":
 
     # Convert the regex to a regex that this program can understand (this regex engine can't understand ranges)'
 
-    whitespaces_regex = f'({"|".join(whitespaces)})+'
-    keywords_regex = f'({"|".join(keywords)})'
-    symbols_regex = f'({"|".join(escaped_symbols)})'
-
     # Same as "[a-zA-Z]([a-zA-Z]|[0-9])*""
     identifier_regex = f"{LETTER_SPECIAL_CHAR}({LETTER_SPECIAL_CHAR}|{DIGIT_SPECIAL_CHAR})*"
     # Same as "\".*\""
@@ -109,113 +219,8 @@ if __name__ == "__main__":
     # Same as "/\*.*\*/"
     comment_regex = f"/\*({ANYTHING_SPECIAL_CHAR})*\*/"
 
-    # Build the automata
-
-    keywords_automaton = LexerAutomaton(keywords_regex, "keywords")
-    identifier_automaton = LexerAutomaton(identifier_regex, "identifiers")
-    string_automaton = LexerAutomaton(string_regex, "strings")
-    number_automaton = LexerAutomaton(number_regex, "numbers")
-    comment_automaton = LexerAutomaton(comment_regex, "comments")
-
-    symbols_automaton = LexerAutomaton(symbols_regex, "symbols")
-    symbols_automaton.automaton.visualize()
-    whitespace_automaton = LexerAutomaton(whitespaces_regex, "whitespaces")
-
-    # Generate the token ids
-    token_ids = {}
-    id_counter = 0
-
-    for keyword in keywords:
-        token_ids[keyword] = id_counter
-        id_counter += 1
-    for symbol in symbols:
-        token_ids[symbol] = id_counter
-        id_counter += 1
-    token_ids["identifiers"] = id_counter
-    id_counter += 1
-    token_ids["strings"] = id_counter
-    id_counter += 1
-    token_ids["numbers"] = id_counter
-    id_counter += 1
-    token_ids["comments"] = id_counter
-    id_counter += 1
-
-    def tokenize(program):
-        symbol_table = {}  # {token_type: {token_value: position_in_symbol_table}}}
-        scanner_output = []  # [(token_id, position_in_symbol_table)]
-
-        automata = [keywords_automaton, identifier_automaton, string_automaton,
-                    number_automaton, comment_automaton, symbols_automaton, whitespace_automaton]
-
-        i = 0
-
-        while i < len(program):
-            longest_match = None
-            longest_match_token_type = None
-
-            for automaton in automata:
-                match = automaton.find_longest_match(program[i:])
-                if longest_match is None or len(match) > len(longest_match):
-                    longest_match = match
-                    longest_match_token_type = automaton.name
-
-            if longest_match is None or len(longest_match) == 0:
-                raise Exception("Syntax error: invalid token at",
-                                i, "artifact: ", program[i:min(len(program), i+10)])
-
-            if longest_match_token_type == "whitespaces":
-                i += len(longest_match)
-                continue
-
-            remaining = program[i+len(longest_match):]
-            longest_remaining_match = None
-            longest_remaining_match_token_type = None
-
-            if remaining:
-                for automaton in automata:
-                    match = automaton.find_longest_match(remaining)
-                    if longest_remaining_match is None or len(match) > len(longest_remaining_match):
-                        longest_remaining_match = match
-                        longest_remaining_match_token_type = automaton.name
-
-                # Tokens should be separated by whitespaces or symbols, so if the longest match is not followed by a whitespace or a symbol, then it is not a valid token
-                if longest_match_token_type in ["identifiers", "strings", "numbers"] and longest_remaining_match_token_type not in ["whitespaces", "symbols"]:
-                    raise Exception(
-                        "Syntax error: delimiter expected after", longest_match, "but", program[i+len(longest_match)], "found at", i+len(longest_match))
-
-            # Add the token to the symbol table
-            if longest_match_token_type == "identifiers" or longest_match_token_type == "strings" or longest_match_token_type == "numbers":
-                if longest_match_token_type not in symbol_table:
-                    symbol_table[longest_match_token_type] = {}
-
-                if longest_match not in symbol_table[longest_match_token_type]:
-                    symbol_table[longest_match_token_type][len(
-                        symbol_table[longest_match_token_type])] = longest_match
-
-            def get_symbol_table_position(token_type, token_value):
-                if token_type not in symbol_table:
-                    return None
-                else:
-                    # {position_in_symbol_table: token_value}
-                    symbol_table_positions = symbol_table[token_type]
-                    for position, value in symbol_table_positions.items():
-                        if value == token_value:
-                            return position
-
-            def get_token_id(token_type, token_value):
-                if token_type == "identifiers" or token_type == "strings" or token_type == "numbers" or token_type == "comments":
-                    return token_ids[token_type]
-                elif token_type == "symbols" or token_type == "keywords":
-                    return token_ids[token_value]
-                else:
-                    raise Exception("Invalid token type")
-
-            scanner_output.append((get_token_id(longest_match_token_type, longest_match), get_symbol_table_position(
-                longest_match_token_type, longest_match)))
-
-            i += len(longest_match)
-
-        return symbol_table, scanner_output
+    lexer = Lexer(keywords, symbols, escaped_symbols, whitespaces, identifier_regex,
+                  string_regex, number_regex, comment_regex)
 
     # Fix:
     # 8. /* in the middle of the string should throw an error
@@ -229,10 +234,11 @@ if __name__ == "__main__":
         with open(f"./example_programs/{program_name}", "r") as program_file:
             programs.append(program_file.read())
 
-    symbol_table, scanner_output = tokenize(programs[8])
+    symbol_table, scanner_output = lexer.tokenize(programs[7])
+    token_id_table = lexer.token_ids
 
     print("Token ids:")
-    for token_name, token_id in token_ids.items():
+    for token_name, token_id in token_id_table.items():
         print(token_name, token_id)
 
     print("\nSymbol table:")
@@ -246,18 +252,9 @@ if __name__ == "__main__":
     for i in scanner_output:
         print(i)
 
-    def recognize_token(token_id, symbol_table_position=None):
-        for token_name, token_id_ in token_ids.items():
-            if token_id_ == token_id:
-                if token_name == "identifiers" or token_name == "strings" or token_name == "numbers":
-                    return symbol_table[token_name][symbol_table_position]
-                else:
-                    return token_name
-        return None
-
     recognized_tokens = []
     for token_id, symbol_table_position in scanner_output:
-        recognized_tokens.append(recognize_token(
+        recognized_tokens.append(lexer.recognize_token(
             token_id, symbol_table_position))
 
     print("\nRecognized tokens:")

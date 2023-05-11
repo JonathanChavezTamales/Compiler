@@ -390,6 +390,7 @@ class Automaton:
         return new_nfa
 
     def _symbol(self, symbol):
+        print(self.depth)
         nfa = Automaton(depth=self.depth + 1, id=self.id)
         initial = nfa.add_state(is_initial=True)
         final = nfa.add_state(is_final=True)
@@ -617,17 +618,7 @@ class Automaton:
 if __name__ == "__main__":
 
     automaton = Automaton(regex='a(b|c)*d')
-    # automaton.make_deterministic()
-    # print(automaton.get_all_transitions())
     automaton.make_deterministic()
     automaton.visualize()
     print(automaton.get_all_transitions())
     print(automaton.match('abbbcd'))
-
-    # automaton = Automaton(regex='l(l|d)*')
-    # automaton.make_deterministic()
-    # automaton.visualize()
-    # cases = ["l", "ll", "llllllll",
-    #          "lldldldldldldldlllldllld", "dlll", "sdfsdf", "", "l", "d", "l+11"]
-    # for case in cases:
-    #     print(f"Match '{case}': {automaton.match(case)}")
