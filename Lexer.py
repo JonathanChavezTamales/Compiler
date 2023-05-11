@@ -1,5 +1,4 @@
 from Automaton import Automaton, DIGIT_SPECIAL_CHAR, LETTER_SPECIAL_CHAR, ANYTHING_SPECIAL_CHAR
-import os
 
 
 class Lexer:
@@ -132,7 +131,6 @@ class Lexer:
 
         self.keywords_automaton = LexerAutomaton(
             self.keywords_regex, "keywords")
-        print(self.symbols_regex)
         self.symbols_automaton = LexerAutomaton(self.symbols_regex, "symbols")
         self.identifier_automaton = LexerAutomaton(
             self.identifier_regex, "identifiers")
@@ -223,8 +221,9 @@ if __name__ == "__main__":
                   string_regex, number_regex, comment_regex)
 
     # Fix:
-    # 8. /* in the middle of the string should throw an error
-    # 7. How to handle +=, two operators together
+    # 1. /* in the middle of the string should throw an error
+    # 2. How to handle +=, two operators together
+    # 3. Symbol table has duplicate entries ex: (0, x), (1, x)
 
     # Read programs from ./example_programs folder
     program_names = ["program_1.c", "program_2_error.c", "program_3_error.c",

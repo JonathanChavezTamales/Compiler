@@ -390,7 +390,6 @@ class Automaton:
         return new_nfa
 
     def _symbol(self, symbol):
-        print(self.depth)
         nfa = Automaton(depth=self.depth + 1, id=self.id)
         initial = nfa.add_state(is_initial=True)
         final = nfa.add_state(is_final=True)
