@@ -89,9 +89,9 @@ if __name__ == "__main__":
     keywords = ["int", "float", "string", "for", "if",
                 "else", "while", "return", "read", "write", "void"]
     escaped_symbols = ["\+", "-", "\*", "/", "<", "<=", ">", ">=", "==", "!=",
-                       "=", ";", ",", "\"", ".", "\(", "\)", "[", "]", "{", "}", "/\*", "\*/"]
+                       "=", ";", ",", "\"", "\(", "\)", "[", "]", "{", "}", "/\*", "\*/"]  # . is not included because it is not a symbol in the grammar
     symbols = ["+", "-", "*", "/", "<", "<=", ">", ">=", "==", "!=",
-               "=", ";", ",", "\"", ".", "(", ")", "[", "]", "{", "}", "/*", "*/"]
+               "=", ";", ",",  "(", ")", "[", "]", "{", "}", "/*", "*/"]  # " and . are not included because they are not symbols in the grammar
     whitespaces = (" ", "\n", "\t")
 
     # Convert the regex to a regex that this program can understand (this regex engine can't understand ranges)'
@@ -118,25 +118,8 @@ if __name__ == "__main__":
     comment_automaton = LexerAutomaton(comment_regex, "comments")
 
     symbols_automaton = LexerAutomaton(symbols_regex, "symbols")
+    symbols_automaton.automaton.visualize()
     whitespace_automaton = LexerAutomaton(whitespaces_regex, "whitespaces")
-
-    # Fix:
-    # 1. Comments are not working
-    # 2. 0. and .8 ERROR
-    # 3. 3abc4 ERROR
-    # 4. 3.4.5 ERROR
-    # 5. !abe = 8, -jojo = 3 ERROR
-    # 5. @ in the middle of the string ERROR
-    # 6. /* in the middle of the string ERROR
-    # 7. 6 += i ERROR
-
-    # Read programs from ./example_programs folder
-    program_names = ["program_1.c", "program_2_error.c", "program_3_error.c",
-                     "program_4_error.c", "program_5_error.c", "program_6_error.c"]
-    programs = []
-    for program_name in program_names:
-        with open(f"./example_programs/{program_name}", "r") as program_file:
-            programs.append(program_file.read())
 
     # Generate the token ids
     token_ids = {}
@@ -166,8 +149,6 @@ if __name__ == "__main__":
 
         i = 0
 
-        keywords_automaton.find_longest_match("\"Hello world\"")
-
         while i < len(program):
             longest_match = None
             longest_match_token_type = None
@@ -178,8 +159,9 @@ if __name__ == "__main__":
                     longest_match = match
                     longest_match_token_type = automaton.name
 
-            if longest_match is None:
-                raise Exception("No automaton found a match")
+            if longest_match is None or len(longest_match) == 0:
+                raise Exception("Syntax error: invalid token at",
+                                i, "artifact: ", program[i:min(len(program), i+10)])
 
             if longest_match_token_type == "whitespaces":
                 i += len(longest_match)
@@ -198,8 +180,8 @@ if __name__ == "__main__":
 
                 # Tokens should be separated by whitespaces or symbols, so if the longest match is not followed by a whitespace or a symbol, then it is not a valid token
                 if longest_match_token_type in ["identifiers", "strings", "numbers"] and longest_remaining_match_token_type not in ["whitespaces", "symbols"]:
-                    raise Exception("Invalid token", longest_match,
-                                    longest_remaining_match)
+                    raise Exception(
+                        "Syntax error: delimiter expected after", longest_match, "but", program[i+len(longest_match)], "found at", i+len(longest_match))
 
             # Add the token to the symbol table
             if longest_match_token_type == "identifiers" or longest_match_token_type == "strings" or longest_match_token_type == "numbers":
@@ -235,9 +217,19 @@ if __name__ == "__main__":
 
         return symbol_table, scanner_output
 
-    symbol_table, scanner_output = tokenize(programs[0])
+    # Fix:
+    # 8. /* in the middle of the string should throw an error
+    # 7. How to handle +=, two operators together
 
-    print(programs[0])
+    # Read programs from ./example_programs folder
+    program_names = ["program_1.c", "program_2_error.c", "program_3_error.c",
+                     "program_4_error.c", "program_5_error.c", "program_6_error.c", "program_7_error.c", "program_8_error.c", "program_9_error.c"]
+    programs = []
+    for program_name in program_names:
+        with open(f"./example_programs/{program_name}", "r") as program_file:
+            programs.append(program_file.read())
+
+    symbol_table, scanner_output = tokenize(programs[8])
 
     print("Token ids:")
     for token_name, token_id in token_ids.items():
