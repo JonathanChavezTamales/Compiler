@@ -1,3 +1,12 @@
+"""
+Automaton module
+
+This module contains the Automaton class and its methods.
+The Automaton class is used to represent a finite automaton.
+The automaton can be constructed from a regular expression using Thompson's construction.
+The automaton can be converted to a DFA using the subset construction.
+"""
+
 from graphviz import Digraph
 
 
@@ -15,7 +24,14 @@ global_state_counter = 0
 
 
 class Automaton:
+    """
+    Automaton class
+    """
+
     def __init__(self, regex=None, depth=0, id=None):
+        """
+        Initialize the automaton, either from a regular expression or from an id.
+        """
         global global_automata_counter
         self.depth = depth
         self.alphabet = set()
@@ -37,6 +53,9 @@ class Automaton:
             self.transitions = dict()
 
     def _preprocess_regex(self, regex):
+        """
+        Preprocess the regular expression to insert concatenation symbols.
+        """
         if CONCATENATION in regex:
             raise Exception(
                 f"Symbols {CONCATENATION} are not allowed in the regex")
@@ -96,6 +115,9 @@ class Automaton:
         return processed_concatenation_regex
 
     def regex_to_postfix(self, regex):
+        """
+        Convert a regular expression from infix to postfix notation using the shunting-yard algorithm.
+        """
         # Define the precedence of operators
         precedence = {'|': 0, CONCATENATION: 1, '+': 2, '?': 3, '*': 3}
 
@@ -135,7 +157,9 @@ class Automaton:
         return output_queue
 
     def from_regex(self, regex):
-        # Convert a regular expression to an NFA using Thompson's construction.
+        """
+        Convert a regular expression to an NFA using Thompson's construction.
+        """
 
         postfix_regex = self.regex_to_postfix(regex)
 
@@ -198,6 +222,9 @@ class Automaton:
         self.transitions = nfa.transitions
 
     def add_state(self, is_initial=False, is_final=False):
+        """
+        Add a new state to the NFA.
+        """
         global global_state_counter
         state_name = f"{str(self.depth)}.{str(global_state_counter)}"
         global_state_counter += 1
@@ -215,6 +242,9 @@ class Automaton:
         return state_name
 
     def add_transition(self, source, symbol, target):
+        """
+        Add a new transition to the NFA.
+        """
         if source not in self.transitions:
             self.transitions[source] = dict()
         if symbol not in self.transitions[source]:
@@ -224,6 +254,9 @@ class Automaton:
         self.states[source].add_transition(symbol, target)
 
     def visualize(self):
+        """
+        Visualize the NFA using Graphviz.
+        """
         transitions = self.get_all_transitions()
         dot = Digraph(comment='NFA')
 
@@ -262,6 +295,9 @@ class Automaton:
         return f"Automaton(states={self.states}, initial_state={self.initial_state}, final_states={self.final_states}, transitions={self.transitions})"
 
     def get_all_transitions(self):
+        """
+        Return all transitions in the NFA.
+        """
         # Return all transitions using BFS to traverse the states
         visited = set()
         queue = [self.initial_state]
@@ -284,6 +320,9 @@ class Automaton:
         return transitions
 
     def _plus(self, nfa):
+        """
+        Return the NFA for the plus operator.
+        """
         new_nfa = Automaton(depth=self.depth + 1, id=self.id)
         initial = new_nfa.add_state(is_initial=True)
         final = new_nfa.add_state(is_final=True)
@@ -304,6 +343,9 @@ class Automaton:
         return new_nfa
 
     def _question(self, nfa):
+        """
+        Return the NFA for the question operator.
+        """
         new_nfa = Automaton(depth=self.depth + 1, id=self.id)
         initial = new_nfa.add_state(is_initial=True)
         final = new_nfa.add_state(is_final=True)
@@ -326,6 +368,9 @@ class Automaton:
         return new_nfa
 
     def _concatenate(self, nfa):
+        """
+        Return the NFA for the concatenation operator.
+        """
         for final_state in self.final_states:
             self.add_transition(final_state, EPS, nfa.initial_state)
             global_state_register[self.id][final_state].is_final = False
@@ -344,6 +389,9 @@ class Automaton:
         return self
 
     def _star(self, nfa):
+        """
+        Return the NFA for the star operator.
+        """
         new_nfa = Automaton(depth=self.depth + 1, id=self.id)
         initial = new_nfa.add_state(is_initial=True)
         final = new_nfa.add_state(is_final=True)
@@ -363,6 +411,9 @@ class Automaton:
         return new_nfa
 
     def _union(self, nfa):
+        """
+        Return the NFA for the union operator.
+        """
         new_nfa = Automaton(depth=self.depth + 1, id=self.id)
         initial = new_nfa.add_state(is_initial=True)
         final = new_nfa.add_state(is_final=True)
@@ -390,6 +441,9 @@ class Automaton:
         return new_nfa
 
     def _symbol(self, symbol):
+        """
+        Return the NFA for the symbol operator.
+        """
         nfa = Automaton(depth=self.depth + 1, id=self.id)
         initial = nfa.add_state(is_initial=True)
         final = nfa.add_state(is_final=True)
@@ -399,7 +453,9 @@ class Automaton:
         return nfa
 
     def make_deterministic(self):
-
+        """
+        Make the automaton deterministic using the subset construction algorithm.
+        """
         dfa_transitions, final_states = self.nfa_to_dfa(
             self.get_all_transitions(),
             self.initial_state
@@ -436,7 +492,14 @@ class Automaton:
         pass
 
     class State:
+        """
+        A state in an automaton.
+        """
+
         def __init__(self, name, is_initial=False, is_final=False, parent_nfa=None):
+            """
+            Create a new State.
+            """
             self.name = name
             self.is_initial = is_initial
             self.is_final = is_final
@@ -444,6 +507,9 @@ class Automaton:
             self.parent_nfa = None
 
         def add_transition(self, symbol, target):
+            """
+            Add a transition from this state to another state.
+            """
             if symbol not in self.transitions:
                 self.transitions[symbol] = set()
             self.transitions[symbol].add(target)
@@ -452,7 +518,9 @@ class Automaton:
             return f"State {self.name} (initial={self.is_initial}, final={self.is_final})"
 
     def from_transitions(self, transitions, initial_state, final_states):
-        # Create a new Automaton from a list of transitions. A transition is a tuple (source, symbol, target).
+        """
+        Create a new Automaton from a list of transitions. A transition is a tuple (source, symbol, target).
+        """
 
         # Create a new Automaton.
         automaton = Automaton()
@@ -482,6 +550,9 @@ class Automaton:
         return automaton
 
     def nfa_to_dfa(self, nfa_transitions, initial_state):
+        """
+        Convert an NFA to a DFA using the subset construction algorithm.
+        """
 
         def epsilon_closure(state, transitions):
             closure = set([state])
@@ -547,6 +618,9 @@ class Automaton:
         return dfa_transitions, final_states
 
     def match(self, string):
+        """
+        Match a string against the automaton.
+        """
         if not self.is_deterministic:
             raise Exception("Automaton is not deterministic.")
 
@@ -580,6 +654,10 @@ class Automaton:
         return current_state in self.final_states
 
     def transition(self, state, symbol):
+        """
+        Transition from a state to another state given a symbol.
+        """
+
         # If state is an object, get its name.
         if isinstance(state, Automaton.State):
             state = state.name
@@ -610,7 +688,9 @@ class Automaton:
         return global_state_register[self.id][state_name]
 
     def get_initial_state(self):
-        # Return the object of the initial state.
+        """
+        Return the object of the initial state.
+        """
         return self.states[self.initial_state]
 
 
