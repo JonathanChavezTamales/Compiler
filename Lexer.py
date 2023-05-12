@@ -47,6 +47,18 @@ class Lexer:
                 i += len(longest_match)
                 continue
 
+            # If longest match is the opening of a comment, it means that the comment is not closed
+            if longest_match == "/*":
+                raise Exception("Syntax error: comment not closed at", i)
+
+            # If longest match is the closing of a comment, it means that the comment is not opened
+            if longest_match == "*/":
+                raise Exception("Syntax error: comment not opened at", i)
+
+            # If longest match is the opening of a string, it means that the string is not closed
+            if longest_match == '"':
+                raise Exception("Syntax error: string not closed at", i)
+
             remaining = program[i+len(longest_match):]
             longest_remaining_match = None
             longest_remaining_match_token_type = None
@@ -68,7 +80,9 @@ class Lexer:
                 if longest_match_token_type not in symbol_table:
                     symbol_table[longest_match_token_type] = {}
 
-                if longest_match not in symbol_table[longest_match_token_type]:
+                existing_symbol_table_values = symbol_table[longest_match_token_type].values(
+                )
+                if longest_match not in existing_symbol_table_values:
                     symbol_table[longest_match_token_type][len(
                         symbol_table[longest_match_token_type])] = longest_match
 
@@ -222,18 +236,15 @@ if __name__ == "__main__":
 
     # Fix:
     # 1. /* in the middle of the string should throw an error
-    # 2. How to handle +=, two operators together
-    # 3. Symbol table has duplicate entries ex: (0, x), (1, x)
 
-    # Read programs from ./example_programs folder
-    program_names = ["program_1.c", "program_2_error.c", "program_3_error.c",
-                     "program_4_error.c", "program_5_error.c", "program_6_error.c", "program_7_error.c", "program_8_error.c", "program_9_error.c"]
+    program_names = ["1_success.c", "2_error.c", "3_error.c",
+                     "4_error.c", "5_error.c", "6_error.c", "7_error.c", "8_error.c", "9_success.c"]
     programs = []
     for program_name in program_names:
         with open(f"./example_programs/{program_name}", "r") as program_file:
             programs.append(program_file.read())
 
-    symbol_table, scanner_output = lexer.tokenize(programs[7])
+    symbol_table, scanner_output = lexer.tokenize(programs[8])
     token_id_table = lexer.token_ids
 
     print("Token ids:")

@@ -2,7 +2,7 @@
 int x[10]; string s; float f1; float f2[10];
 int miniloc(float a[], int low, int high){ int i; float y; int k;
 k = low;
-x += 3; /* Error */
+y = .3234; /* Error */
 i = low + 1; while (i < high){
 if (a[i] < x){ y = a[i];
 k = i; }

@@ -2,10 +2,10 @@
 int x[10]; string s; float f1; float f2[10];
 int miniloc(float a[], int low, int high){ int i; float y; int k;
 k = low;
-a = 3; 
-i = low + /* 1; while (i < high){
+x += 3;
+i = low + 1; while (i < high){
 if (a[i] < x){ y = a[i];
 k = i; }
 i = i + 1; }
 return k;
-}/* END of miniloc() 
+}/* END of miniloc() */
