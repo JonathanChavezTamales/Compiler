@@ -274,8 +274,64 @@ if __name__ == "__main__":
     lexer = Lexer(keywords, symbols, escaped_symbols, whitespaces, identifier_regex,
                   string_regex, number_regex, comment_regex)
 
-    # Fix:
-    # 1. /* in the middle of the string should throw an error
+    def build_transition_table(transitions):
+        """
+        Build a table that maps a state to the next state based on the input symbol. First row is the input symbols, first column is the states.
+        Intersections are the next states.
+
+        Transitions is a set of tuples (state, symbol, next_state)
+        """
+
+        # Get all the symbols
+        symbols = set()
+        for transition in transitions:
+            symbols.add(transition[1])
+
+        # Get all the states
+        states = set()
+        for transition in transitions:
+            states.add(transition[0])
+            states.add(transition[2])
+
+        # sort the states, they are strings, so sort them as integers
+        states = sorted(states, key=lambda state: int(state))
+        symbols = sorted(list(symbols))
+
+        # Create a mapping from states and symbols to their respective rows and columns
+        # +1 to leave space for symbols
+        state_to_row = {state: i+1 for i, state in enumerate(states)}
+        # +1 to leave space for states
+        symbol_to_col = {symbol: i+1 for i, symbol in enumerate(symbols)}
+
+        # Create a matrix of states x symbols
+        transition_table = [["" for _ in range(len(symbols)+1)]
+                            for _ in range(len(states)+1)]  # +1 to leave space for states and symbols
+
+        # Fill the first row with the symbols
+        for symbol, col in symbol_to_col.items():
+            transition_table[0][col] = symbol
+
+        # Fill the first column with the states
+        for state, row in state_to_row.items():
+            transition_table[row][0] = state
+
+        # Fill the intersections with the next states
+        for state, symbol, next_state in transitions:
+            row = state_to_row[state]
+            col = symbol_to_col[symbol]
+            transition_table[row][col] = next_state
+
+        return transition_table
+
+    transition_table = build_transition_table(
+        lexer.symbols_automaton.automaton.get_all_transitions())
+
+    # # pretty print the transition table
+    # print("Transition table:")
+    # for row in transition_table:
+    #     for column in row:
+    #         print(column, end="\t")
+    #     print()
 
     program_names = ["1_success.c", "2_error.c", "3_error.c",
                      "4_error.c", "5_error.c", "6_error.c", "7_error.c", "8_error.c", "9_success.c"]
@@ -284,7 +340,7 @@ if __name__ == "__main__":
         with open(f"./example_programs/{program_name}", "r") as program_file:
             programs.append(program_file.read())
 
-    symbol_table, scanner_output = lexer.tokenize(programs[7])
+    symbol_table, scanner_output = lexer.tokenize(programs[0])
     token_id_table = lexer.token_ids
 
     print("Token ids:")
